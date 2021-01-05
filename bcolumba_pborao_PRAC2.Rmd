@@ -1,0 +1,500 @@
+---
+title: "PRAC2"
+author: "Bernardo Columba - Paula Borao"
+date: "15/12/2021"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+if(!require(stringr)){
+    install.packages('VIM', repos='http://cran.us.r-project.org')
+    library(stringr)
+}
+if(!require(RcmdrMisc)){
+    install.packages("RcmdrMisc")
+    library(RcmdrMisc)
+}
+if(!require(moments)){
+    install.packages("moments")
+    library(moments)
+}
+if(!require(nortest)){
+    install.packages("nortest")
+    library(nortest)
+}
+if(!require(corrplot)){
+    install.packages("corrplot")
+    library(corrplot)
+}
+if(!require(scorecard)){
+    install.packages("scorecard")
+    library(scorecard)
+}
+```
+# Conjunto de datos de demanda de bicicletas compartidas de Seúl
+
+El conjunto de datos contiene el recuento de bicicletas públicas alquiladas cada hora en el sistema de bicicletas públicas de Seúl con los datos meteorológicos y la información de vacaciones correspondientes.
+
+Fuente: http://data.seoul.go.kr/
+SOUTH KOREA PUBLIC HOLIDAYS. URL: publicholidays.go.kr
+
+Repositorio: https://archive.ics.uci.edu/ml/datasets/Seoul+Bike+Sharing+Demand#
+
+## 1. Familiarizandose con los datos
+
+Actualmente, las bicicletas de alquiler se introducen en muchas ciudades urbanas para mejorar la comodidad de la movilidad. Es importante que la bicicleta de alquiler esté disponible y sea accesible al público en el momento adecuado, ya que reduce el tiempo de espera. Con el tiempo, proporcionar a la ciudad un suministro estable de bicicletas de alquiler se convierte en una gran preocupación. La parte crucial es la predicción del recuento de bicicletas necesario a cada hora para el suministro estable de bicicletas de alquiler.
+El conjunto de datos contiene información meteorológica (temperatura, humedad, velocidad del viento, visibilidad, punto de rocío, radiación solar, nevadas, precipitaciones), el número de bicicletas alquiladas por hora e información sobre la fecha.
+
+Con estos sistemas de bicicletas compartidas, las personas alquilan una bicicleta en un lugar y la devuelven a un lugar diferente o al mismo según sea necesario. Las personas pueden alquilar una bicicleta mediante membresía (en su mayoría usuarios habituales) o bajo demanda (en su mayoría usuarios ocasionales). Este proceso está controlado por una red de quioscos automatizados en toda la ciudad.
+
+## 2. Información sobre los atributos
+
+1. Date ->     Fecha: año-mes-día
+2. Rented Bike Count -> Recuento_de_bicicletas_alquiladas: recuento de bicicletas alquiladas cada hora
+3. Hour -> Hora: Hora del día
+4. Temperature(°C) -> Temperatura: Temperatura en grados Celsius
+5. Humidity(%) -> Humedad_porcentaje: Humendad en porcentaje $%$
+6. Wind speed (m/s) -> Velocidad_viento: Velocidad del viento $(m/s)$
+7. Visibility (10m) -> Visibilidad: Visibilidad a 10 $m$
+8. Dew point temperature(°C) -> Temperatura_punto_rocío: Temperatura del punto de rocío en Celsius
+9. Solar Radiation (MJ/m2) -> Radiación_solar: Radiación solar en $(MJ/m2)$
+10. Rainfall(mm) -> Precipitaciones: Precipitaciones en $mm$
+11. Snowfall (cm) -> Nevada: Nevada en $cm$
+12. Seasons -> Temporadas:
+    a. invierno 
+    b. primavera 
+    c. verano 
+    d. otoño
+13. Holiday-> Vacaciones:
+    a.Vacaciones
+    b.No vacaciones
+14. Functioning Day -> Dia_laboral - NoFunc (horas no funcionales), diversión (horas funcionales)
+    a. Si
+    b. No
+
+## 3. Carga del archivo de datos
+```{r message=TRUE, warning=FALSE}
+#Cargo la base de datos de formato csv, separados por coma ','
+data <- read.csv('https://archive.ics.uci.edu/ml/machine-learning-databases/00560/SeoulBikeData.csv',stringsAsFactors = FALSE, header = TRUE, sep=",")
+#Permite acceder a cada columna directamente
+attach(data)
+```
+
+## 4. Revisión de los atributos del Dataset
+Renombro las columnas con nombres mas comprensibles
+```{r message=TRUE, warning=FALSE}
+names(data) = c("Fecha", "Recuento_de_bicicletas_alquiladas", "Hora", "Temperatura", "Humedad_porcentaje", "Velocidad_viento", "Visibilidad", "Temperatura_punto_rocío", "Radiación_solar", "Precipitaciones", "Nevada", "Temporadas", "Vacaciones", "Dia_laboral")
+```
+
+```{r message=TRUE, warning=FALSE}
+#Permite acceder a cada columna directamente
+attach(data)
+#Verifico la dimensión del juego de datos
+dim(data)
+# Vemos la estructura del dataset
+str(data)
+# Estadistica básica de los atributos del dataset
+summary(data)
+```
+
+### 4.1. Tratamiento de los atributos
+Retiro (en caso de haberlo) los espacios en blanco de los atributos categóricos
+```{r message=TRUE, warning=FALSE}
+#Recorro el juego de datos
+for(i in 1:nrow(data)) {
+  #Verifico si la columna es de tipo caracter
+  if(is.character(data$i)){
+  #Retiro los espacios de inicio y fin de cada columna tipo caracter
+    data$i <- trimws(data$i)
+  }
+}
+
+#Paso la Fecha a formato Date de R
+data$Fecha=as.Date(data$Fecha,format="%d/%m/%Y")
+```
+
+### 4.2. Estadísticas de valores vacíos
+```{r message=TRUE, warning=FALSE}
+# Estadísticas de valores vacíos
+colSums(data=="")
+colSums(is.na(data))
+```
+No se encuentran valores vacios, nulos o desconocidos
+
+### 4.3. Análisis descriptivo visual
+Se representa de forma visual las variables del conjunto de datos y las distribuciones de sus valores
+```{r message=TRUE, warning=FALSE}
+#Visualización de la frecuencia de las variables 
+#Variables cuantitativas
+par(mfrow=c(2,5))
+#Recorro el juego de datos
+for (i in 1:ncol(data)){
+  #Verifico si la columna es de tipo numérica
+  if (is.numeric(data[,i])){
+    with(data, Hist(data[,i], scale="frequency", ylab="Frecuencia", xlab=colnames(data)[i], breaks="Sturges", col="#76D7C4"))
+  }
+}
+```
+
+```{r message=TRUE, warning=FALSE}
+#Variables cualitativas
+par(mfrow=c(2,2))
+#Recorro el juego de datos
+for (i in 1:ncol(data)){
+  #Verifico si la columna es de tipo caracter
+  if (is.character(data[,i])){
+    with(data, Barplot(data[,i], xlab=colnames(data)[i], ylab="Frecuencia", col="#FF5733"))
+  }
+}
+```
+
+#### 4.3.1 Anáilisis de los Histogramas y los Diagramas de Barras
+**Atributos Cuantitativos Histogramas**
+
+La máxima frecuencia de bicicletas alquiladas está dentro del rango de $[0,250]$.
+
+Las bicicletas permanecen alquiladas en mayor rango de $[0,2]$ horas.
+
+A mayor temperatura mayor número de bicicletas alquiadas, pero si pasa los $30^{0}C$ el alquiler de bicicletas disminuye.
+
+Similar ocurre con la humedad a mayor humedad mayor frecuencia de bicicletas alquiladas, pero cuando se sobrepasa la humendad del $60%$ el alquiler de bicicletas empieza a disminuir lentamente.
+
+Si la velocidad del viento aumenta, la frecuencia de bicicletas alquiladas disminuye.
+
+Se alquilan mayor número de bicicletas cuando la visibilidad es mayor.
+
+Mientras menor sea la radiación solar mayor es el número de bicicletas alquiladas.
+
+El mayor número de bicicletas alquiladas solo se da cuando las precipitaciones son bajas.
+
+Se puede observar también que en gran porcentaje solo se alquilan bicicletas si no hay nevada o muy poca.
+
+**Atributos Cualitativos Diagramas de barras**
+
+Se observa mayor número de bicicletas alquiladas se dan cuando no hay días festivos.
+
+#### 4.3.2 Hipótesis Iniciales
+
+Con esta información puedo realizarme las primeras preguntas sobre el set de datos y realizar las primeras hipótesis que se contestarán en los siguientes apratados:
+
+1. ¿El alquiler de bicicletas es mayor en la hora de ingreso y salida del horario laboral, es decir a las 07:00 y a las 17:00?
+
+2. ¿Cuando se realizan mas alquileres de bicicletas entre semana o fines de semana?
+
+3. ¿Que tempordas prefieren los usuarios alquilar bicicletas? ¿Prefieren los días soleados o los días de invierno?
+
+4. ¿Los alquileres de bicicleta son mayores en días festivos o en días normales?
+
+5. ¿En el transcurso de los años el alquiler de bicicleta aumenta o disminuye?
+
+6. ¿Depende el número de alquiler de bicicletas de la radiación solar, es decir mientras mayor es la radiación solar menor es el número de usuarios o viceversa?
+
+### 4.4 Outliers
+Visualización de cajas de las variables cuantitativas
+```{r message=TRUE, warning=FALSE}
+# Genero un bucle para graficar las cajas por cada una de las columnas cuantitativas del juego de datos solicitada
+for (i in 1:(ncol(data))){
+  if (is.numeric(data[,i])){
+    boxplot(data[,i], main = colnames(data)[i],col=(c("#76D7C4")))
+    #Valores atipicos
+    print('Valores atípicos')
+    elementos <- boxplot.stats(data[,i])$out #muestra los valores atípicos
+    print(elementos)
+    longitud <- length(elementos) #Cantidad de valores atípicos
+    print('Cantidad de valores atípicos')
+    print(longitud)
+  }
+}
+
+print(paste('El porcentaje de outliers es',1930/8760*100,'%'))
+```
+
+El porcentaje de outliers representa el $22%$ del total de datos, un porcentaje medio alto dependiendo del análisis futuro decidiré si considerar estos outliers o no, por el momento se mantendrán.
+
+## 5. Comprobación de la normalidad
+```{r message=TRUE, warning=FALSE}
+#Verifico normalidad
+for (i in 1:(ncol(data))){
+  if (is.numeric(data[,i])){
+    print(colnames(data)[i])
+    skewness(data[,i]) #Para tratar de ser un poco más exacto voy a utilizar un método numérico para el test de normalidad.
+    print(agostino.test(data[,i])) #D'Agostino skewness test
+    qqnorm(data[,i])
+    qqline(data[,i])
+  }
+}
+```
+Segundo método para verificar Normalidad
+```{r message=TRUE, warning=FALSE}
+alpha = 0.05
+col.names = colnames(data)
+for (i in 1:ncol(data)) {
+  if (i == 1) cat("Variables que no siguen una distribución normal:\n")
+  if (is.integer(data[,i]) | is.numeric(data[,i])) {
+    p_val = ad.test(data[,i])$p.value
+    if (p_val < alpha) {
+      cat(col.names[i])
+      # Format output
+      if (i < ncol(data) - 1) cat(", ")
+      if (i %% 3 == 0) cat("\n")
+    }
+  }
+}
+```
+
+### 5.1 Análisis de normalidad 
+Con el método gráfico se puede comprobar que la muestra sigue una distribución normal, los puntos se distribuyen a los largo de la línea.
+
+Para tratar de ser un poco más exacto voy a utilizar un método numérico para el test de normalidad.
+
+El punto de corte que se suele utilizar es $P = 0.05$:
+
+  1. Recuento_de_bicicletas_alquiladas $p_{valor}<0.05$, p-value es menor que 0.05, rechazo la hipótesis nula, es decir: la distribución no es normal
+  2. Hora $p_{valor}>0.05$, p-value es mayor que 0.05, acepto la hipótesis nula, es decir: la distribución es normal
+  3. Temperatura $p_{valor}<0.05$, p-value es menor que 0.05, rechazo la hipótesis nula, es decir: la distribución no es normal
+  4. Humedad_porcentaje $p_{valor}<0.05$, p-value es menor que 0.05, rechazo la hipótesis nula, es decir: la distribución no es normal
+  5. Velocidad_viento $p_{valor}<0.05$, p-value es menor que 0.05, rechazo la hipótesis nula, es decir: la distribución no es normal
+  6. Visibilidad $p_{valor}<0.05$, p-value es menor que 0.05, rechazo la hipótesis nula, es decir: la distribución no es normal
+  7. Temperatura_punto_rocío $p_{valor}<0.05$, p-value es menor que 0.05, rechazo la hipótesis nula, es decir: la distribución no es normal
+  8. Radiación_solar $p_{valor}<0.05$, p-value es menor que 0.05, rechazo la hipótesis nula, es decir: la distribución no es normal
+  9. Precipitaciones $p_{valor}<0.05$, p-value es menor que 0.05, rechazo la hipótesis nula, es decir: la distribución no es normal
+  10. Nevada $p_{valor}<0.05$, p-value es menor que 0.05, rechazo la hipótesis nula, es decir: la distribución no es normal
+  
+## 6. Comprobación de la homogeneidad de la varianza
+```{r message=TRUE, warning=FALSE}
+fligner.test(Recuento_de_bicicletas_alquiladas ~ Hora, data = data)
+fligner.test(Recuento_de_bicicletas_alquiladas ~ Temperatura, data = data)
+fligner.test(Recuento_de_bicicletas_alquiladas ~ Humedad_porcentaje, data = data)
+fligner.test(Recuento_de_bicicletas_alquiladas ~ Velocidad_viento, data = data)
+fligner.test(Recuento_de_bicicletas_alquiladas ~ Visibilidad, data = data)
+fligner.test(Recuento_de_bicicletas_alquiladas ~ Temperatura_punto_rocío, data = data)
+fligner.test(Recuento_de_bicicletas_alquiladas ~ Radiación_solar, data = data)
+fligner.test(Recuento_de_bicicletas_alquiladas ~ Precipitaciones, data = data)
+fligner.test(Recuento_de_bicicletas_alquiladas ~ Nevada, data = data)
+```
+
+En ninguno de los casos de comprueba Homogeneidad de la varianza.
+
+<strong>Pero podemos concluir revisando los gráficos también:
+
+A la vista del gráfico de residuos en relación a los valores ajustados, no se observa ningún patrón especial, por lo que tanto podemos asumir que se cumple homocedasticidad. Existen algunos valores extremos que pueden alterar la homocedasticidad, pero asumimos que se cumple en general.
+
+Por otro lado el Q_Q plot, muestra que los datos no se ajustan exactamente a una distribución normal para los valores inferiores o superiores de la gráfica, pero sí para los valores centrales. Por tanto, existen algunos valores extremos que pueden afectar a la condición de normalidad.</strong>
+
+## 7. Pruebas Estadisticas
+### 7.1 Correlaciones
+Realizo el cálculo y la visualización para comprender la correlación de los atributos en caso de que exista alguna correlación entre ellos.
+```{r message=TRUE, warning=FALSE}
+corr_matrix <- matrix(nc = 2, nr = 0)
+colnames(corr_matrix) <- c("estimate", "p-value") 
+data_num <- data.frame(data['Recuento_de_bicicletas_alquiladas'], data['Hora'],data['Temperatura'], data['Humedad_porcentaje'], data['Velocidad_viento'], data['Visibilidad'], data['Temperatura_punto_rocío'], data['Radiación_solar'], data['Precipitaciones'], data['Nevada']) #Construyo un dataset con los atributos numéricos
+```
+
+```{r message=TRUE, warning=FALSE}
+corr_matrix <- matrix(nc = 2, nr = 0)
+colnames(corr_matrix) <- c("estimate", "p-value")
+# Calcular el coeficiente de correlación para cada variable cuantitativa
+for (i in 1:(ncol(data_num) - 1)) {
+  if (is.integer(data_num[,i]) | is.numeric(data_num[,i])) {
+    spearman_test = cor.test(data_num[,i],
+    data_num[,length(data_num)],
+    method = "spearman")
+    corr_coef = spearman_test$estimate
+    p_val = spearman_test$p.value
+    # Add row to matrix
+    pair = matrix(ncol = 2, nrow = 1)
+    pair[1][1] = corr_coef
+    pair[2][1] = p_val
+    corr_matrix <- rbind(corr_matrix, pair)
+    rownames(corr_matrix)[nrow(corr_matrix)] <- colnames(data_num)[i]
+  }
+}
+
+MC <- cor(data_num) #permite ejecutar una matriz de correlación
+corrplot.mixed(MC, tl.pos = "lt", number.cex = 0.5) #Visualizo la correlación de los atributos
+print(corr_matrix) #Imprimo los datos de correlación
+```
+Se observa que los atributos en general que tienen una correlación muy baja a excepción  entre Temperatura_punto_rocío con Temperatura con un valor de correlación alto 0.91 
+
+```{r message=TRUE, warning=FALSE}
+prop.table(table(data$Temporadas)) #Reviso los Valores dentro de las estaciones en la temporada
+```
+
+```{r message=TRUE, warning=FALSE}
+#Convierto las variables discretas en factores (Temporada, Vacaciones, Dia_laboral, Hora)
+data$Temporadas=as.factor(data$Temporadas)
+data$Vacaciones=as.factor(data$Vacaciones)
+data$Dia_funcional=as.factor(data$Dia_laboral)
+data$Hora=as.factor(data$Hora)
+```
+
+## 8. Prueba de hipótesis (Análisis Multivariante)
+<strong>Tendecia Horaria:</strong> 
+
+Veo la tendencia horaria del recuento durante horas y verifico si la hipótesis es correcta o no.
+
+Separo el conjunto de datos de prueba y entrenamiento.
+```{r message=TRUE, warning=FALSE}
+#Demanda de uso compartido de bicicletas, pronosticar la demanda de alquiler de bicicletas
+boxplot(data$Recuento_de_bicicletas_alquiladas~data$Hora,xlab="Hora", ylab="Número de Bicicletas Alquiladas") # Visualizo con un bloxplot
+```
+
+Tendencia de la demanda de bicicletas en horas del día
+
+Se pueden observar Rangos en los que hay mayor demanda de bicicletas:
+
+    1. En el rango [7-9] horas y de [17-19] horas hay una alta demanda de alquiler de bicicletas.
+  
+    2. En el rango [0-6] horas y de [20-23] horas hay una baja demanda de alquiler de bicicletas.
+  
+    3. En el rango de [10-16] horas se mantiene un promedio constante en la demanda. 
+    
+<strong>Tendecia Diaria:</strong> 
+
+El gráfico muestra la demanda de alquiler de bicicletas durante días de las semana.
+```{r message=TRUE, warning=FALSE}
+#Paso las fechas a nombres de días
+dias<-weekdays(data$Fecha)
+data$dias=dias #Agrego la columna días al Dataframe data
+boxplot(data$Recuento_de_bicicletas_alquiladas~data$dias,xlab="Día", ylab="Número de Bicicletas Alquiladas") # Visualizo con un bloxplot
+```
+
+Tendencia de la demanda de bicicletas en los días de la semana, practicamente no varía
+
+<strong>Tendecia Temporada:</strong> 
+```{r message=TRUE, warning=FALSE}
+boxplot(data$Recuento_de_bicicletas_alquiladas~data$Temporadas,xlab="Temporadas", ylab="Número de Bicicletas Alquiladas") # Visualizo con un bloxplot
+```
+
+Tendencia de la demanda de bicicletas en temporadas, en verano se tiene mayor demanda de Bicicletas
+
+<strong>Tendecia Días Festivos:</strong> 
+```{r message=TRUE, warning=FALSE}
+boxplot(data$Recuento_de_bicicletas_alquiladas~data$Vacaciones,xlab="Festividad", ylab="Número de Bicicletas Alquiladas") # Visualizo con un bloxplot
+```
+
+Tendencia de la demanda de bicicletas en días festivos, en días no festivos la tendencia de alquiler de bicicletas es mayor
+
+<strong>Tendecia Años:</strong> 
+```{r message=TRUE, warning=FALSE}
+data$anio <- format(data$Fecha, "%Y") #Capturo solo el año del formato fecha
+data$anio=as.factor(data$anio) #Agrego al dataframe un nuevo atributo año como factor
+boxplot(data$Recuento_de_bicicletas_alquiladas~data$anio,xlab="Años", ylab="Número de Bicicletas Alquiladas") # Visualizo con un bloxplot
+```
+
+Tendencia de la demanda de bicicletas por años, en el 2018 aumenta la demanda de alquiler de bicicletas
+
+### 8.1 Análisis de las relaciones mediante hipotesis
+
+¿Existe alguna relación entre la radiación solar alta (mayor a la media) y la baja (menor a la media) demanda del alquiler de bicicletas?
+
+Para contestar estar preguntas voy a a sumir normalidad de los atributos.
+
+$H_0$(Hipótesis Nula): La variable Radiación_solar alta (mayor a la media) y el bajo Recuento_de_bicicletas_alquiladas (menor a la media) son independientes
+
+$H_1$(Hipótesis Alternativa): Existe una relación de dependecia entre las variables
+
+$\alpha = 0.05$ para un Nivel de Confianza del 95%
+
+```{r message=FALSE, comment=NA}
+#Realizo la comparación de los datos con la media y genero nuevas columnas
+data$lower.Recuento_de_bicicletas_alquiladas <- (data$Recuento_de_bicicletas_alquiladas < mean(data$Recuento_de_bicicletas_alquiladas)) 
+data$upper.Radiación_solar <- (data$Radiación_solar > mean(data$Radiación_solar))
+#Codifico los valores como 0 y 1.
+data$lower.Recuento_de_bicicletas_alquiladas <- ifelse( data$lower.Recuento_de_bicicletas_alquiladas==TRUE, 1, 0)
+data$upper.Radiación_solar <- ifelse( data$upper.Radiación_solar==TRUE, 1, 0)
+#Utilizo la función R chisq.test
+table <- table( data$lower.Recuento_de_bicicletas_alquiladas, data$upper.Radiación_solar)
+print(table) #Imprimo en pantalla la tabla
+chisq.test(table,correct=FALSE) #Valores de la función chisq
+```
+$p_{valor} = `r chisq.test(table,correct=FALSE)[3]`$
+
+$p_{valor} < \alpha$
+
+Dado que $p_{valor}$ es $>$ que $\alpha$, rechazo $H_0$. <strong>Rechazamos la hipótesis nula y concluyo que existe relación entre la radiación alta y la baja demanda de alquiler de bicicletas.</strong>
+
+### 8.2 Modelo de regresión lineal univariante
+
+<strong>Modelo lineal: Recuento_de_bicicletas_alquiladas ~ Precipitaciones</strong>
+
+Se estima por mínimos cuadrados ordinarios un modelo lineal que explique la variable Recuento_de_bicicletas_alquiladas en función de las Precipitaciones
+
+```{r message=FALSE, comment=NA}
+Model.8.2<- lm(Recuento_de_bicicletas_alquiladas~Precipitaciones, data=data )
+summary(Model.8.2)
+corr = cor(x = Recuento_de_bicicletas_alquiladas, y = Precipitaciones, method = "pearson")
+```
+A la vista de los resultados,no  existe una relación lineal positiva entre ambas variables. Se observa que el coeficiente de determinación ajustado es: $R^{2}_{ajustado} = `r summary(Model.8.2) [9]`$. Es decir, el modelo de regresión lineal explica el 1.5% de la varianza del recuento de bicicletas.
+
+Si se calcula el coeficiente de correlación obtenemos un valor de $`r corr`$.
+
+### 8.3 Modelo de regresión lineal múltiple (regresores cuantitativos)
+
+<strong>Modelo lineal: Recuento_de_bicicletas_alquiladas ~ Precipitaciones + Visibilidad</strong>
+
+Se estima por mínimos cuadrados ordinarios un modelo lineal que explique la variable Recuento_de_bicicletas_alquiladas en función de las Precipitaciones y la Visibilidad. Se procederá a evaluar la bondad de ajuste a través del coeficiente de determinación ajustado y se verá si el modelo mejora.
+
+```{r message=FALSE, comment=NA}
+#Ajusto el modelo de regresión múltiple:
+Model.8.3<- lm(Recuento_de_bicicletas_alquiladas~Precipitaciones+Visibilidad, data=data)
+vif(Model.8.3)
+cor(data$Visibilidad, data$Precipitaciones)
+summary( Model.8.3)
+```
+
+A la vista de los resultados,no  existe una relación lineal positiva entre ambas variables. Se observa que el coeficiente de determinación ajustado es: $R^{2}_{ajustado} = `r summary( Model.8.3) [9]`$. Es decir, el modelo de regresión lineal explica el 4.77% de la varianza del recuento de bicicletas.No hay evidencia de mejora del modelo.
+
+### 8.4 Generación y Comparación del $R^{2}_{ajustado}$ para elegir el mejor modelo 
+
+```{r message=FALSE, comment=NA}
+#Ajusto varios modelos de regresión múltiple:
+Model.8.4.1<- lm(Recuento_de_bicicletas_alquiladas~Precipitaciones+Visibilidad+Temperatura+Humedad_porcentaje+Radiación_solar+Dia_laboral+Temporadas, data=data)
+Model.8.4.2<- lm(Recuento_de_bicicletas_alquiladas~Hora+Temperatura+Humedad_porcentaje+Velocidad_viento+Temperatura_punto_rocío+Nevada+Temporadas+Dia_laboral+Precipitaciones+Vacaciones+Radiación_solar, data=data)
+Model.8.4.3<- lm(Recuento_de_bicicletas_alquiladas~Velocidad_viento+Visibilidad+Radiación_solar+Temperatura+Dia_laboral, data=data)
+Model.8.4.4<- lm(Recuento_de_bicicletas_alquiladas~Temperatura_punto_rocío+Humedad_porcentaje+Visibilidad+Radiación_solar, data=data)
+Model.8.4.5<- lm(Recuento_de_bicicletas_alquiladas~Nevada+Hora+Temperatura+Precipitaciones+Temporadas+Vacaciones+Radiación_solar, data=data)
+```
+
+```{r message=FALSE, comment=NA}
+# Tabla con los coeficientes de determinación de cada modelo
+tabla.coeficientes <- matrix(c(1, summary(Model.8.4.1)$r.squared, 2, summary(Model.8.4.2)$r.squared, 3, summary(Model.8.4.3)$r.squared, 4, summary(Model.8.4.4)$r.squared, 5, summary(Model.8.4.5)$r.squared), ncol = 2, byrow = TRUE)
+mejor_modelo <- summary(Model.8.4.2)$r.squared
+colnames(tabla.coeficientes) <- c("Modelo", "R^2")
+tabla.coeficientes
+```
+
+### 8.5 Predicciones del valor con el mejor modelo
+
+El mejor modelo es el segundo modelo con un valor $R^{2}_{ajustado} = `r mejor_modelo`$
+
+```{r message=FALSE, comment=NA}
+newdata <- data.frame(
+  Hora = '7',
+  Temperatura = 15,
+  Humedad_porcentaje = 40,
+  Velocidad_viento = 2,
+  Temperatura_punto_rocío = 10,
+  Nevada = 2,
+  Temporadas = 'Summer',
+  Dia_laboral = 'Yes',
+  Precipitaciones = 10,
+  Vacaciones = 'No Holiday',
+  Radiación_solar = 2.0
+)
+# Predecir el precio
+pred <- predict(Model.8.4.2, newdata)
+```
+Con los datos para realizar la predicción se alquilarían en total $`r pred`$ bicicletas
+
+Exporto los datos del dataset a un archivo csv
+```{r message=FALSE, comment=NA}
+write.csv(data,file="SeoulBikeData_final.csv",row.names=TRUE)
+```
+
+## Conclusiones
+
+Se ha logrado realizar el análisis del dataset con datos y resultados muy interesantes. Se han logrado contestar preguntas iniciales asi como obtenre información adicional que se detalla dentro de todo el análisis con datos detallados, además se han construido varios modelos de regresión lineal para poder obtener una predicción al final eligiendo el que tiene mejor $R^{2}_{ajustado}$ y se logra realizar la predicción de cuantas biciletas se alquilarían con los datos que se proporcionan como predicción.
